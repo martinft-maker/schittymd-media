@@ -4,4 +4,4 @@
 - `diagnoser.jsonl` – én diagnose per linje (id, navn, icd, rammer, definisjon, symptomer, arsaker, kriterier, behandling, hook)
 - `used_ids.txt` – brukte ID-er
 
-Ingen emojier i brødtekst (fonten mangler dem). Emojier kun i overskrifter (lagt inn av rendreren) og i hook-linjen.
+Emojier fungerer overalt i teksten (renderer tegner dem med Noto Color Emoji).
