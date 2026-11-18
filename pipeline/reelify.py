@@ -21,16 +21,21 @@ def lowpass(x, fc):
         acc = (1 - a) * x[i] + a * acc; y[i] = acc
     return y
 
-def music(dur, bpm=124):
+def music(dur, bpm=124, variant=0):
     """Upbeat original groove: four-on-the-floor, offbeat hats, claps, bouncy bass, pluck melody. C-G-Am-F."""
-    n = int(dur * SR); rng = np.random.default_rng(7); beat = 60 / bpm
+    bpm = [124, 120, 128, 122][variant % 4]
+    n = int(dur * SR); rng = np.random.default_rng(7 + variant); beat = 60 / bpm
     drums, bass, lead, chords = (np.zeros(n) for _ in range(4)); duck = np.ones(n)
     kn = int(0.28 * SR); kt = np.arange(kn) / SR
     kick = np.sin(2 * np.pi * (50 * kt + 90 * (1 - np.exp(-kt * 35)) / 35)) * np.exp(-kt * 11)
     cn = int(0.16 * SR); clap = lowpass(rng.standard_normal(cn), 3200) * env(cn, 0.001, 0.04) * 1.8
     hn = int(0.06 * SR); hat = np.diff(rng.standard_normal(hn + 1)) * env(hn, 0.0005, 0.018) * 0.35
-    prog = [(261.63, (0, 4, 7)), (196.00, (0, 4, 7)), (220.00, (0, 3, 7)), (174.61, (0, 4, 7))]
-    melody = [0, 4, 7, 12, 7, 4, 9, 7]  # semitones over chord root, 8th notes
+    progs = [[(261.63, (0, 4, 7)), (196.00, (0, 4, 7)), (220.00, (0, 3, 7)), (174.61, (0, 4, 7))],   # C G Am F
+             [(220.00, (0, 3, 7)), (174.61, (0, 4, 7)), (261.63, (0, 4, 7)), (196.00, (0, 4, 7))],   # Am F C G
+             [(293.66, (0, 4, 7)), (220.00, (0, 4, 7)), (246.94, (0, 3, 7)), (196.00, (0, 4, 7))],   # D A Bm G
+             [(174.61, (0, 4, 7)), (261.63, (0, 4, 7)), (196.00, (0, 4, 7)), (220.00, (0, 3, 7))]]   # F C G Am
+    melodies = [[0, 4, 7, 12, 7, 4, 9, 7], [12, 7, 4, 7, 9, 7, 4, 0], [0, 7, 4, 7, 12, 11, 7, 4], [4, 7, 12, 7, 4, 2, 0, 4]]
+    prog = progs[variant % 4]; melody = melodies[(variant // 4) % 4]
     b = 0
     while b * beat < dur:
         t = b * beat
@@ -61,7 +66,7 @@ def music(dur, bpm=124):
     mix[:fi] *= np.linspace(0, 1, fi); mix[-fo:] *= np.linspace(1, 0, fo)
     return mix / (np.max(np.abs(mix)) + 1e-9) * 0.89
 
-def main(prefix, out):
+def main(prefix, out, variant=0):
     tmp = out + ".d"; os.makedirs(tmp, exist_ok=True)
     parts = []
     for i, d in enumerate(DUR, 1):
@@ -73,7 +78,7 @@ def main(prefix, out):
     with open(f"{tmp}/list.txt", "w") as f:
         f.writelines(f"file '{os.path.abspath(p)}'\n" for p in parts)
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", f"{tmp}/list.txt", "-c", "copy", f"{tmp}/v.mp4"], check=True)
-    pcm = (np.clip(music(sum(DUR)), -1, 1) * 32767).astype(np.int16)
+    pcm = (np.clip(music(sum(DUR), variant=variant), -1, 1) * 32767).astype(np.int16)
     with wave.open(f"{tmp}/a.wav", "wb") as w:
         w.setnchannels(1); w.setsampwidth(2); w.setframerate(SR); w.writeframes(pcm.tobytes())
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", f"{tmp}/v.mp4", "-i", f"{tmp}/a.wav", "-map", "0:v", "-map", "1:a",
@@ -82,4 +87,4 @@ def main(prefix, out):
     os.replace(out + ".part.mp4", out)
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2])
+    main(sys.argv[1], sys.argv[2], int(sys.argv[3]) if len(sys.argv) > 3 else 0)
