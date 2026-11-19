@@ -58,9 +58,16 @@ def runs(text):
     return out
 def wrap(d, text, size, maxw, force=None):
     lines, line, x = [], [], 0
+    items = []
     for word, w in runs(text):
         w = force or w
-        ww = seg_width(d, word, F(w, size)) + d.textlength(" ", font=F(w, size))
+        # for lange bindestrek-ord deles etter hver bindestrek, så de kan brytes over flere linjer
+        if force and seg_width(d, word, F(w, size)) > maxw and "-" in word:
+            items += [(pc, w) for pc in re.split(r"(?<=-)", word) if pc]
+        else:
+            items.append((word, w))
+    for word, w in items:
+        ww = seg_width(d, word, F(w, size)) + (0 if word.endswith("-") else d.textlength(" ", font=F(w, size)))
         if x and x + ww > maxw:
             lines.append(line); line, x = [], 0
         line.append((word, w, x)); x += ww
@@ -72,19 +79,24 @@ def slide(head, emoji, body, bullets=False, title=False, size=None):
     size = size or (64 if title else 50)
     lh = int(size * 1.32)
     blocks = []
+    hs0 = 64 if title else 56
     if head:
-        blocks.append(("head", wrap(d, head, 56 if not title else 64, maxw - (84 if emoji else 0), force="Bold")))
+        # krymp overskriften til det lengste ordet (f.eks. lange bindestrek-navn) får plass
+        hw = maxw - (84 if emoji else 0)
+        pieces = [pc for wd, _ in runs(head) for pc in re.split(r"(?<=-)", wd) if pc]
+        while hs0 > 36 and max(seg_width(d, pc, F("Bold", hs0)) for pc in pieces) > hw:
+            hs0 -= 2
+        blocks.append(("head", wrap(d, head, hs0, hw, force="Bold")))
     items = body if isinstance(body, list) else [body]
     for it in items:
         blocks.append(("item", wrap(d, it, size, maxw - (44 if bullets else 0))))
-    hs0 = 64 if title else 56
     total = sum(len(l) * (int(hs0 * 1.3) if k == "head" else lh) + (40 if k == "head" else 30) for k, l in blocks)
     if total > H - 180 and size > 34:
         return slide(head, emoji, body, bullets, title, size - 4)
     y = (H - total) // 2
     for kind, lines in blocks:
         if kind == "head":
-            hs = 64 if title else 56
+            hs = hs0
             if emoji:
                 e = emoji_img(emoji, int(hs * 1.05)); img.paste(e, (x0, y + 6), e)
             for ln in lines:
